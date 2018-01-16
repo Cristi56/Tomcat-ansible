@@ -1,0 +1,36 @@
+---
+# tasks file for java
+
+#- name: Change to install directory
+#  command: chdir=/usr/lib/java
+
+- name: get java link
+  raw: 'curl -s https://java.com/en/download/linux_manual.jsp | grep "Download Java software for Linux x64" | cut -d "\"" -f 4 | head -1'
+  register: java_link
+
+- name: get java version
+  shell: curl -s https://java.com/en/download/linux_manual.jsp | grep "Version" | head -1 | cut -f4 -d " "
+  register: java_version
+- debug: msg="{{ java_version.stdout }}"
+
+- name: get java update
+  shell: curl -s https://java.com/en/download/linux_manual.jsp | grep "Version" | cut -f6 -d " " | cut -f1 -d "<" | head -1
+  register: java_update
+- debug: msg="{{ java_update.stdout }}"
+
+- name: Download archive
+  get_url: 
+    url: "{{ java_link.stdout }}"
+    dest: /opt/
+
+- name: extract archive
+  unarchive:
+    src: /opt/jre-{{ java_version.stdout }}u{{ java_update.stdout }}-linux-x64.tar.gz
+    dest: /usr/lib/
+    copy: no
+
+- name: java alternative
+  alternatives: 
+    name: java
+    link: /usr/bin/java
+    path: /usr/lib/jre1.{{ java_version.stdout }}.0_{{ java_update.stdout }}/bin/java

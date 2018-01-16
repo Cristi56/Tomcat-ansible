@@ -1,0 +1,80 @@
+---
+
+- name: add group "tomcat"
+  group: name=tomcat
+
+- name: add user "tomcat"
+  user: name=tomcat group=tomcat home=/opt/tomcat createhome=no
+  become: True
+  become_method: sudo
+
+- name: grep
+  shell: 'curl -s http://svn.apache.org/repos/asf/tomcat/site/trunk/docs/doap_Tomcat.rdf | grep -A2 "Latest Stable {{ variable }}" | cut -f2 -d ">" | cut -f1 -d "<" | tail -1'
+  register: version
+
+
+ 
+- name: get major version
+  shell: 'curl -s http://svn.apache.org/repos/asf/tomcat/site/trunk/docs/doap_Tomcat.rdf | grep -A2 "Latest Stable {{ variable }}" | cut -f2 -d ">" | cut -f1 -d "<" | cut -f1 -d "." | tail -1'
+  register: major_version
+
+- name: Download Tomcat
+  get_url: url=https://archive.apache.org/dist/tomcat/tomcat-{{ major_version.stdout }}/v{{ version.stdout }}/bin/apache-tomcat-{{ version.stdout }}.tar.gz dest=/opt/apache-tomcat-{{ version.stdout }}.tar.gz
+
+- name: Extract archive
+  command: chdir=/opt/ /bin/tar xvf /opt/apache-tomcat-{{ version.stdout }}.tar.gz 
+#  command: chdir=/usr/share /bin/tar xvf /opt/apache-tomcat-8.5.8.tar.gz -C /opt/ creates=/opt/tomcat
+
+#- name: Symlink install directory
+#  file: src=/opt/apache-tomcat-8.5.8 path=/usr/share/tomcat state=link
+
+- name: Change ownership of Tomcat installation
+  file: path=/opt/apache-tomcat-{{ version.stdout }}/ owner=tomcat group=tomcat state=directory recurse=yes
+#
+#- name: Change ownership of Tomcat installation
+#  file: path=/usr/share/tomcat/ owner=tomcat group=tomcat state=directory recurse=yes
+
+#- name: Configure Tomcat server
+#  template: src=server.xml dest=/opt/apache-tomcat-{{ version }}/conf/
+#  notify: restart tomcat
+
+- name: Configure Tomcat users
+  template: src=tomcat-users.xml dest=/opt/apache-tomcat-{{ version.stdout }}/conf/
+  notify: restart tomcat
+
+- name: Install Tomcat init script
+  template: src=tomcat-initscript.sh dest=/etc/systemd/system/tomcat.service mode=0755
+
+- name: Change ownership of Tomcat installation
+  file: path=/opt/apache-tomcat-{{ version.stdout }}/ owner=tomcat group=tomcat state=directory recurse=yes
+
+- name: Reload daemon
+  command: systemctl daemon-reload
+
+- name: Start Tomcat
+  service: name=tomcat state=started enabled=yes
+  when: "ansible_os_family == 'RedHat' and ansible_distribution_major_version == '7'"
+
+- name: Start Tomcat
+  command: /opt/apache-tomcat-{{ version }}/bin/startup.sh
+  when: "ansible_os_family == 'Debian'"
+
+- name: add ufw rules
+  ufw: rule=allow port=8080 proto=tcp
+  when: "ansible_os_family == 'Debian'"
+
+- name: add ufw rules
+  ufw: rule=allow port=8443 proto=tcp
+  when: "ansible_os_family == 'Debian'"
+
+- name: insert firewalld rule for tomcat http port
+  firewalld: port={{ http_port }}/tcp permanent=true state=enabled immediate=yes
+  when: "ansible_os_family == 'RedHat' and ansible_distribution_major_version == '7'"
+
+- name: insert firewalld rule for tomcat https port
+  firewalld: port={{ https_port }}/tcp permanent=true state=enabled immediate=yes
+  when: "ansible_os_family == 'RedHat' and ansible_distribution_major_version == '7'"
+
+#- name: wait for tomcat to start
+#  wait_for: port=8080
+#{{http_port}}

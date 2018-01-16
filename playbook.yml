@@ -1,0 +1,12 @@
+---
+- hosts: centos.2
+  user: ansible
+  become: yes
+  become_method: sudo
+  vars_prompt:
+  - name: "variable"
+    prompt: "Ce versiune vrei?"
+  roles:
+    - java
+    - tomcat
+ 
